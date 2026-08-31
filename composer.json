@@ -1,0 +1,51 @@
+{
+    "name": "ivo-wmg/borica",
+    "description": "Borica APGW (EMV 3DS) payments for PHP and Laravel — protocol, callbacks and the traps the specification does not mention",
+    "keywords": ["borica", "apgw", "payments", "3ds", "laravel", "bulgaria"],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Ivo Apostolov",
+            "email": "ivo@wmg.bg"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-openssl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0|^12.0",
+        "orchestra/testbench": "^9.0|^10.0",
+        "laravel/pint": "^1.18"
+    },
+    "suggest": {
+        "illuminate/support": "Needed only for the Laravel integration (service provider, facade, migrations)"
+    },
+    "autoload": {
+        "psr-4": {
+            "IvoWmg\\Borica\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "IvoWmg\\Borica\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "IvoWmg\\Borica\\BoricaServiceProvider"
+            ],
+            "aliases": {
+                "Borica": "IvoWmg\\Borica\\Facades\\Borica"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

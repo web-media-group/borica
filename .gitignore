@@ -1,0 +1,13 @@
+/vendor/
+composer.lock
+.phpunit.result.cache
+.idea/
+.vscode/
+
+# Never. Terminal keys and certificates belong outside any repository.
+*.key
+*.pem
+*.cer
+*.csr
+*.p12
+*.pfx

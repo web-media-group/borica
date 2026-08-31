@@ -119,6 +119,20 @@ public function callback(Request $request)
 
 Verify, dispatch, redirect. Nothing else belongs here — see below.
 
+### Telling the customer what happened
+
+```php
+use IvoWmg\Borica\ResponseCode;
+
+ResponseCode::describe($response->rc());          // for your admin screen
+ResponseCode::customerMessage($response->rc());   // for the shopper
+```
+
+Keep them apart. Nobody buying groceries can act on "error in the RRN field",
+and a shop that shows the technical text to a customer whose bank is still
+deciding tells them they were refused — so they pay somewhere else while the
+authorization lands.
+
 ### Completing and reversing a pre-authorization
 
 ```php

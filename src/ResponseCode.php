@@ -137,6 +137,43 @@ final class ResponseCode
         return $rc !== self::SUCCESS && ctype_digit($rc);
     }
 
+    /**
+     * What to tell the shopper.
+     *
+     * [[describe]] is for an operator reading a failed payment; nobody buying
+     * groceries can act on "error in the RRN field". These are deliberately
+     * vaguer, and never contradict the technical text.
+     *
+     * The distinction matters most on the in-progress codes: a shop that runs
+     * [[describe]] through to the storefront tells a customer whose bank is
+     * still deciding that their payment was refused, and they go and pay
+     * somewhere else while the authorization lands.
+     *
+     * English only. Wrap the return value in your own translator — the strings
+     * are stable and short on purpose.
+     */
+    public static function customerMessage(string $rc): string
+    {
+        return match (true) {
+            self::isSuccess($rc) => 'Payment approved.',
+            self::isInProgress($rc) => 'The payment is still being processed. Please wait a moment.',
+            self::isDuplicate($rc) => 'This payment has already been processed.',
+            $rc === '-19', $rc === '65' => 'Your bank could not confirm the payment. Please try again.',
+            $rc === '-20' => 'The payment session expired. Please try again.',
+            $rc === '-25' => 'The payment was cancelled.',
+            $rc === '-10', $rc === '13' => 'Invalid amount.',
+            $rc === '14' => 'Invalid card number.',
+            $rc === '04', $rc === '62' => 'The card is blocked. Please contact your bank.',
+            $rc === '51' => 'Insufficient funds on the card.',
+            $rc === '54' => 'The card has expired.',
+            $rc === '57' => 'This transaction is not allowed for this card.',
+            $rc === '61' => 'The daily card limit has been exceeded.',
+            $rc === '91' => 'The card issuer is unavailable. Please try again later.',
+            self::isIssuerCode($rc) => 'The payment was declined. Please contact your bank.',
+            default => 'Payment failed. Please try again.',
+        };
+    }
+
     public static function describe(string $rc): string
     {
         if (isset(self::DESCRIPTIONS[$rc])) {

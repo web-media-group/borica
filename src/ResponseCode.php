@@ -21,15 +21,25 @@ final class ResponseCode
     public const SUCCESS = '00';
 
     /**
-     * The customer is still on the payment form or at their bank. Not a
-     * decline: nothing may be cancelled while one of these stands.
+     * Nothing has been decided yet. Not a decline: cancelling on one of these
+     * strands an authorization that is still coming.
      *
-     * Note that -24 is NOT here, though it is easy to assume it belongs. Per
-     * the official list -24 is "transaction context data mismatch" — a wrong
-     * currency, or a transaction older than 24 hours. Treating it as
-     * in-progress leaves a genuinely broken payment pending forever.
+     * The first three say so plainly — "client side transaction form in
+     * progress", "client 3D-Secure authentication in progress", "transaction
+     * in progress".
+     *
+     * -24 is here on evidence rather than on the specification, which calls it
+     * "transaction context data mismatch" and lists a wrong currency or an
+     * age over 24 hours. Neither matches what production shows: it arrives one
+     * to three minutes after the order, with the same empty placeholders the
+     * gateway uses when it holds no transaction at all (CURRENCY=USD,
+     * AMOUNT blank, empty STATUSMSG). It means "I do not have this yet".
+     *
+     * Across 131 orders that saw -24, seven went on to pay successfully. A
+     * system that cancels on -24 would have taken their money and cancelled
+     * their orders.
      */
-    public const IN_PROGRESS = ['-31', '-33', '-40'];
+    public const IN_PROGRESS = ['-24', '-31', '-33', '-40'];
 
     /**
      * The gateway says this transaction already ran. It may well have
@@ -54,12 +64,12 @@ final class ResponseCode
         '-15' => 'Error in the RRN field',
         '-16' => 'Another transaction is running on this terminal',
         '-17' => 'Terminal denied access to e-Gateway (typically a P_SIGN failure)',
-        '-19' => 'Error in the authentication request, or authentication failed',
-        '-20' => 'TIMESTAMP too far from gateway time (1 hour by default)',
+        '-19' => 'Authentication failed — the cardholder did not pass 3DS',
+        '-20' => 'Expired transaction — the payment page was abandoned',
         '-21' => 'The transaction has already been executed',
         '-22' => 'Transaction contains invalid authentication information',
         '-23' => 'Invalid transaction context',
-        '-24' => 'Transaction context data mismatch (wrong currency, or older than 24h)',
+        '-24' => 'The gateway holds no such transaction (yet)',
         '-25' => 'Confirmation cancelled by the cardholder',
         '-26' => 'Invalid action BIN',
         '-27' => 'Invalid merchant name',
@@ -70,7 +80,30 @@ final class ResponseCode
         '-32' => 'Duplicate declined transaction',
         '-33' => 'Cardholder authentication in progress',
         '-40' => 'Client side transaction form in progress',
+        '-48' => 'System error at the gateway',
     ];
+
+    /**
+     * ACTION, which the specification does not tabulate and which says more
+     * about what to do than RC does. Values observed in production:
+     *
+     *   0   approved
+     *   1   duplicate of an approved transaction — still approved
+     *   2   declined, by the issuer (RC 05, 51, 54, 57, 61, 62) or expired (-20)
+     *   3   failed before the issuer — gateway or 3DS refused it
+     *   6,7 seen only alongside -20
+     *   21  seen once, alongside -17
+     */
+    public const ACTION_APPROVED = '0';
+
+    public const ACTION_DUPLICATE = '1';
+
+    public const ACTION_DECLINED = '2';
+
+    public const ACTION_FAILED = '3';
+
+    /** Both spellings of approval. Reading ACTION 1 as failure cancels a paid order. */
+    public const ACTION_SUCCESS = [self::ACTION_APPROVED, self::ACTION_DUPLICATE];
 
     public static function isSuccess(string $rc): bool
     {

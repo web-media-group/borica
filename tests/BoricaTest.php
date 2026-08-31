@@ -174,14 +174,40 @@ class BoricaTest extends TestCase
         }
     }
 
-    /** -24 looks like an in-progress code and is not one. */
-    public function test_minus_twenty_four_is_a_final_failure(): void
+    /**
+     * -24 reads like a hard error and is not one. Of 131 production orders
+     * that saw it, seven went on to pay: cancelling here would have taken
+     * their money and cancelled their order.
+     */
+    public function test_minus_twenty_four_is_not_a_final_failure(): void
     {
-        $response = $this->borica($this->gateway(['ACTION' => '0', 'RC' => '-24']))
+        $response = $this->borica($this->gateway(['ACTION' => '3', 'RC' => '-24']))
             ->complete('000042', '1.00', 'R', 'I');
 
-        $this->assertFalse($response->isInProgress());
+        $this->assertTrue($response->isInProgress());
+        $this->assertFalse($response->isFinalFailure());
+        $this->assertFalse($response->isSuccess());
+    }
+
+    /** ACTION 2 is an issuer decline; 3 is a refusal before the issuer. Both final. */
+    public function test_issuer_declines_are_final(): void
+    {
+        foreach (['05' => '2', '51' => '2', '54' => '2', '-19' => '3', '-25' => '3'] as $rc => $action) {
+            $response = $this->borica($this->gateway(['ACTION' => $action, 'RC' => $rc]))
+                ->complete('000042', '1.00', 'R', 'I');
+
+            $this->assertTrue($response->isFinalFailure(), 'RC '.$rc.' must be final');
+        }
+    }
+
+    /** An abandoned payment page expires as -20 about fifteen minutes in. */
+    public function test_an_expired_transaction_is_final(): void
+    {
+        $response = $this->borica($this->gateway(['ACTION' => '2', 'RC' => '-20']))
+            ->complete('000042', '1.00', 'R', 'I');
+
         $this->assertTrue($response->isFinalFailure());
+        $this->assertStringContainsString('abandoned', $response->message());
     }
 
     public function test_duplicates_are_neither_success_nor_final_failure(): void

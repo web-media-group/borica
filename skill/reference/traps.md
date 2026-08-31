@@ -104,25 +104,93 @@ come from the card issuer and describe the card. `00` is the only success.
 It means duplicate. The money moved. Treating it as failure cancels a paid
 order.
 
-### Three codes mean "still running"
+### Four codes mean "nothing has been decided"
 
-`-31` transaction already in progress, `-33` cardholder authentication in
-progress, `-40` client-side form in progress. A customer taking their time on
-the bank's page produces these. Cancelling on them leaves the authorization to
-succeed a minute later against an order that no longer exists — money held, no
-order to fulfil.
+`-40` client-side form in progress, `-33` cardholder authentication in
+progress, `-31` transaction already in progress, and `-24`. A customer taking
+their time on the bank's page produces these. Cancelling leaves the
+authorization to succeed a minute later against an order that no longer
+exists — money held, no order to fulfil.
 
-**`-24` is not one of them**, though it is easy to assume so. Per the official
-list it is "transaction context data mismatch" — wrong currency, or a
-transaction older than 24 hours. One production system treats it as in-progress
-and leaves genuinely broken payments pending forever.
+`-24` belongs in that list on evidence, not on the specification, which calls
+it "transaction context data mismatch" and offers a wrong currency or an age
+over 24 hours. Across 221 production occurrences neither was true: it arrived
+**one to three minutes after the order**, carrying the placeholders the gateway
+uses when it holds nothing at all — `CURRENCY=USD`, blank `AMOUNT`, empty
+`STATUSMSG`. It means "I have no such transaction yet".
+
+Of the 131 orders that saw it, **seven went on to pay successfully**. A system
+that cancels on `-24` would have taken their money and cancelled their orders.
+
+### USD and 0.00 are not a currency bug
+
+A status check for a transaction the gateway has not registered comes back with
+`CURRENCY=USD` and `AMOUNT=0.00`. It is filler, not a real transaction in
+dollars — across 3600 outgoing requests in one shop, not one was in anything
+but EUR. Do not chase it, and do not compare amounts on a reply that carries
+an in-progress code.
+
+### ACTION is more useful than RC, and undocumented
+
+The specification tabulates RC and leaves ACTION alone, but ACTION is what
+separates a decline from an error:
+
+| ACTION | |
+|---|---|
+| `0` | approved |
+| `1` | duplicate of an approved transaction — still approved |
+| `2` | declined by the issuer, or expired |
+| `3` | refused before the issuer — gateway or 3DS |
+
+### -19 is the customer, not your M_INFO
+
+Malformed M_INFO does land on `-19`, and during development that is usually
+what it is. In production it almost never is: of 1007 occurrences in one shop,
+955 carried "Authentication failed." with `PARES_STATUS=N` — the cardholder
+entered the wrong code or gave up at their bank. It is the single commonest
+failure there is. Do not go looking at your address fields when live traffic
+starts producing it.
+
+### -20 is an abandoned page, not a clock
+
+The published code list explains `-20` as the merchant's clock drifting from
+the gateway's. It is also what you get when a customer opens the payment page
+and walks away: it arrives 15 to 20 minutes after the order, with `ACTION=2`
+and the message "Expired transaction." Same fifteen-minute window, entirely
+different cause, and the ordinary one.
+
+If `-20` appears on the *first* request of every payment, the clock is wrong.
+If it appears 15 minutes in on some payments, those customers left.
+
+### -17 means two different things
+
+On a request it is almost always a signature failure — the RFU tail first of
+all. On a status check it usually means the gateway will not discuss that
+transaction: 90 such replies in one shop carried an empty message and no
+amount, while thousands of other requests signed identically went through.
+
+The test is proportion. If every request fails with `-17`, the signature is
+wrong. If a handful do, it is not.
 
 ### Duplicates need asking, not deciding
 
 `-21` "already executed" and `-32` "duplicate declined". The original may have
 succeeded. Ask TRTYPE 90 before doing anything; if the status check itself
-fails or returns -17, leave the order pending for a human rather than
+fails or returns `-17`, leave the order pending for a human rather than
 cancelling.
+
+### Some real codes are not in the published list
+
+`-48` "System error." turns up in live traffic and appears nowhere in the code
+list. Treat an unknown negative code as a failure, log it verbatim, and do not
+assume the table is complete.
+
+### -30 may never appear at all
+
+"Declined as fraud" was not seen once in roughly 6000 logged replies over five
+months. Two production systems carried contradictory descriptions for it —
+"session expired" in one, "reversed transaction" in another — which is what
+happens when a table is filled in from guesswork rather than from traffic.
 
 ### A valid signature says nothing about the amount
 

@@ -38,7 +38,7 @@ final class Response
     public function isSuccess(): bool
     {
         return $this->verified
-            && in_array($this->action(), ['0', '1'], true)
+            && in_array($this->action(), ResponseCode::ACTION_SUCCESS, true)
             && ResponseCode::isSuccess($this->rc());
     }
 

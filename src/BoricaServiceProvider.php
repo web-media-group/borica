@@ -6,6 +6,8 @@ namespace IvoWmg\Borica;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
+use IvoWmg\Borica\Console\PruneLogsCommand;
+use IvoWmg\Borica\Logging\DatabaseLog;
 use IvoWmg\Borica\Signature\Signer;
 
 class BoricaServiceProvider extends ServiceProvider
@@ -28,11 +30,14 @@ class BoricaServiceProvider extends ServiceProvider
             return new LaravelHttpClient((int) $app['config']['borica.timeout']);
         });
 
+        $this->app->singleton(DatabaseLog::class, fn ($app): DatabaseLog => new DatabaseLog($app['db']->connection()));
+
         $this->app->singleton(Borica::class, function ($app): Borica {
             return new Borica(
                 config: $app['config']['borica'],
                 signer: $app->make(Signer::class),
                 http: $app->make(HttpClient::class),
+                log: $app['config']['borica.logging.database'] ? $app->make(DatabaseLog::class) : null,
             );
         });
 
@@ -44,6 +49,8 @@ class BoricaServiceProvider extends ServiceProvider
         if (! $this->app->runningInConsole()) {
             return;
         }
+
+        $this->commands([PruneLogsCommand::class]);
 
         $this->publishes([
             __DIR__.'/../config/borica.php' => $this->app->configPath('borica.php'),

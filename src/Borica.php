@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace IvoWmg\Borica;
 
 use IvoWmg\Borica\Exceptions\BoricaException;
+use IvoWmg\Borica\Logging\Logs;
+use IvoWmg\Borica\Logging\Redactor;
 use IvoWmg\Borica\Responses\Response;
 use IvoWmg\Borica\Responses\ResponseParser;
 use IvoWmg\Borica\Signature\SignatureBuilder;
@@ -25,6 +27,7 @@ class Borica
         private readonly array $config,
         private readonly Signs $signer,
         private readonly ?HttpClient $http = null,
+        private readonly ?Logs $log = null,
     ) {}
 
     // ── Browser-delivered ────────────────────────────────────────────────────
@@ -42,7 +45,7 @@ class Borica
         ?MerchantInfo $info = null,
         ?string $backref = null,
     ): array {
-        return $this->signed($this->baseFields($trtype, $order, $amount, $description, $info, $backref));
+        return $this->logged($this->signed($this->baseFields($trtype, $order, $amount, $description, $info, $backref)));
     }
 
     /**
@@ -68,7 +71,7 @@ class Borica
         $fields['MERCH_TRAN_STATE'] = 'S';
         $fields['MERCH_RN_ID'] = $merchantReference ?? $this->merchantReference($order);
 
-        return $this->signed($fields);
+        return $this->logged($this->signed($fields));
     }
 
     // ── Server-to-server ─────────────────────────────────────────────────────
@@ -182,6 +185,15 @@ class Borica
      */
     public function response(array $data): Response
     {
+        $response = $this->verified($data);
+        $this->log?->record(Logs::CALLBACK, Redactor::fields($data), $response->isVerified());
+
+        return $response;
+    }
+
+    /** @param  array<string, mixed>  $data */
+    private function verified(array $data): Response
+    {
         $pSign = (string) ($data['P_SIGN'] ?? '');
 
         if ($pSign === '') {
@@ -279,6 +291,8 @@ class Borica
     /** @param array<string, string> $fields */
     private function send(array $fields): Response
     {
+        $this->logged($fields);
+
         if (! $this->http instanceof HttpClient) {
             throw new BoricaException(
                 'No HTTP client configured; server-to-server calls are unavailable. '
@@ -288,7 +302,24 @@ class Borica
 
         $body = $this->http->post((string) $this->config['url'], $fields);
 
-        return $this->response(ResponseParser::parse($body));
+        $data = ResponseParser::parse($body);
+        $response = $this->verified($data);
+        $this->log?->record(Logs::RESPONSE, Redactor::fields($data), $response->isVerified());
+
+        return $response;
+    }
+
+    /**
+     * A request, kept redacted (the form the browser posts is logged when it is built).
+     *
+     * @param  array<string, string>  $fields
+     * @return array<string, string>
+     */
+    private function logged(array $fields): array
+    {
+        $this->log?->record(Logs::REQUEST, Redactor::fields($fields));
+
+        return $fields;
     }
 
     /** Two decimals, dot separator. RC -10 otherwise. */

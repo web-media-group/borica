@@ -32,6 +32,16 @@ php artisan vendor:publish --tag=borica-migrations
 php artisan migrate
 ```
 
+Every exchange then goes to `borica_logs` (`BORICA_LOG_DATABASE=false` turns it
+off): the form for the bank when it is built, each server-to-server request and
+answer, each callback with whether its signature verified. Only an allow-list
+of fields is kept (`Logging\Redactor`): never the card number (the masked one
+keeps its last four digits), the token (kept as `[present]`), the signature or
+`M_INFO`. Keep a year of it for reconciliation; schedule
+`php artisan borica:prune-logs` (default: rows older than 400 days).
+
+Outside Laravel, pass your own `Logging\Logs` as the fourth argument of `Borica`.
+
 ```env
 BORICA_TERMINAL=
 BORICA_MERCHANT_ID=
